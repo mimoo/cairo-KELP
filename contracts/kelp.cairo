@@ -140,7 +140,7 @@ end
 # the time of the latest claim reveal
 # defaults to 0
 @storage_var 
-func reveal_time() -> (timestamp: felt):
+func last_reveal_time() -> (timestamp: felt):
 end
 
 # step 1
@@ -225,20 +225,20 @@ func reveal{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(c
     let (local other_commitment) = active_claim.read()
 
     # TODO: fix bug https://www.cairo-lang.org/docs/how_cairo_works/builtins.html#revoked-implicit-arguments
-    if other_commitment != 0:
-        let (local other_time) = commitments.read(other_commitment)
-
-        # if not expired, make sure our commit is more ancient
-        let time_ellapsed = reveal_time - other_time
-        let (local not_expired) = is_le(time_ellapsed, expired_commit)
-        if not_expired == 1:
-            assert_lt(commit_time, other_time)
-        end
-    end
+#    if other_commitment != 0:
+#        let (local other_time) = commitments.read(other_commitment)
+#
+#        # if not expired, make sure our commit is more ancient
+#        let time_ellapsed = reveal_time - other_time
+#        let (local not_expired) = is_le(time_ellapsed, expired_commit)
+#        if not_expired == 1:
+#            assert_lt(commit_time, other_time)
+#        end
+#    end
 
     # set active claim
     active_claim.write(commitment)
-    reveal_time.write()
+    last_reveal_time.write(reveal_time)
 
     # change owner
     #    owner.write(address_r)
@@ -249,30 +249,39 @@ end
 # ------
 # claim the contract
 @external
-func claim():
+func claim{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(address_c, address_r, nonce):
     # enforce that there is a commitment
     let (commitment) = active_claim.read()
     assert_not_zero(commitment)
 
     # check that enough time has passed since the reveal
     let (claim_time) = get_block_timestamp()
-    let (reveal_time) = reveal_time.read()
+    let (reveal_time) = last_reveal_time.read()
     let time_ellapsed = claim_time - reveal_time
     assert_lt (time_ellapsed, expired_claim)
 
-    # 
-    assert_lt ()
+    # open commitment
+    let (hash) = hash2{hash_ptr=pedersen_ptr}(address_c, address_r)
+    let (hash) = hash2{hash_ptr=pedersen_ptr}(hash, nonce)
+    assert hash = commitment
+
+    # change owner
+    owner.write(address_r)
+
+    return ()
 end
 
 # bonus
 # -----
 # challenge a fraudulent claim
 @external
-func challenge():
+func challenge{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}():
     assert_owner()
 
     # overwrite any active claim
     active_claim.write(0)
+
+    return ()
 end
 
 #
