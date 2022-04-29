@@ -223,18 +223,24 @@ func reveal{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(c
     # compare with active claim
     # WARNING: WOOT. What if someone submits a commitment in the same block, as they see your claim? You need to make sure that there's no other "active" commitments when you submit yours
     let (local other_commitment) = active_claim.read()
+    let (local other_time) = commitments.read(other_commitment)
+
+    # if not expired, make sure our commit is more ancient
+    let time_ellapsed = reveal_time - other_time
+    let (local not_expired) = is_le(time_ellapsed, expired_commit)
+
 
     # TODO: fix bug https://www.cairo-lang.org/docs/how_cairo_works/builtins.html#revoked-implicit-arguments
-#    if other_commitment != 0:
-#        let (local other_time) = commitments.read(other_commitment)
-#
-#        # if not expired, make sure our commit is more ancient
-#        let time_ellapsed = reveal_time - other_time
-#        let (local not_expired) = is_le(time_ellapsed, expired_commit)
-#        if not_expired == 1:
-#            assert_lt(commit_time, other_time)
-#        end
-#    end
+    if other_commitment != 0:
+        if not_expired == 1:
+            assert_lt(commit_time, other_time)
+            tempvar range_check_ptr = range_check_ptr
+        else:
+            tempvar range_check_ptr = range_check_ptr
+        end
+    else:
+        tempvar range_check_ptr = range_check_ptr
+    end
 
     # set active claim
     active_claim.write(commitment)
